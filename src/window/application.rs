@@ -138,6 +138,9 @@ impl Application {
         );
 
         window_wrapper.request_window_creation();
+        if let Some(address) = cmd_line_settings.neovide_ipc.clone() {
+            window_wrapper.start_ipc(address, proxy.clone());
+        }
 
         Self {
             idle,
@@ -396,7 +399,8 @@ impl ApplicationHandler<EventPayload> for Application {
         match cause {
             winit::event::StartCause::Init => {
                 self.window_wrapper
-                    .try_create_window(event_loop, &self.proxy);
+                    .try_create_window(event_loop, &self.proxy, None)
+                    .expect("Failed to create initial window");
                 self.schedule_next_event(event_loop);
             }
             winit::event::StartCause::ResumeTimeReached { .. } => {
@@ -473,7 +477,8 @@ impl ApplicationHandler<EventPayload> for Application {
             #[cfg(target_os = "macos")]
             UserEvent::CreateWindow => {
                 self.window_wrapper
-                    .try_create_window(event_loop, &self.proxy);
+                    .try_create_window(event_loop, &self.proxy, None)
+                    .expect("Failed to create window");
                 self.should_render = ShouldRender::Immediately;
             }
             #[cfg(target_os = "macos")]
@@ -484,6 +489,11 @@ impl ApplicationHandler<EventPayload> for Application {
             UserEvent::NeovimRestart(details) => {
                 self.window_wrapper.queue_restart(event.window_id, details);
                 self.pending_draw_commands.clear();
+                self.should_render = ShouldRender::Immediately;
+            }
+            UserEvent::IpcRequest(request) => {
+                self.window_wrapper
+                    .handle_ipc_request(request, event_loop, &self.proxy);
                 self.should_render = ShouldRender::Immediately;
             }
             _ => {
